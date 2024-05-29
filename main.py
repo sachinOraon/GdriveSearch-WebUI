@@ -125,7 +125,6 @@ def fetch_tgarchive_token() -> Optional[str]:
     if not TG_ARCHIVE_AUTH_API or not TG_ARCHIVE_USER:
         logger.warning("Required params for fetching token are missing")
         return auth_token
-    logger.info(f"Fetching token from:: {TG_ARCHIVE_AUTH_API}")
     try:
         req_body = {
             "site": "tgarchive",
@@ -140,7 +139,12 @@ def fetch_tgarchive_token() -> Optional[str]:
             "Origin": "https://tgarchive.eu.org",
             "Referer": "https://tgarchive.eu.org"
         }
-        auth_response = requests.post(url=TG_ARCHIVE_AUTH_API, data=json.dumps(req_body), headers=req_headers)
+        if secondary_tg_auth_api := os.getenv(key='SECONDARY_TG_AUTH_API'):
+            logger.info(f"Fetching token from:: {secondary_tg_auth_api}")
+            auth_response = requests.get(url=f"{secondary_tg_auth_api}/token/{req_body['auth_data']['username']}")
+        else:
+            logger.info(f"Fetching token from:: {TG_ARCHIVE_AUTH_API}")
+            auth_response = requests.post(url=TG_ARCHIVE_AUTH_API, data=json.dumps(req_body), headers=req_headers)
         if auth_response.ok:
             logger.info(f"Received response:: {auth_response.text}")
             auth_token = json.loads(auth_response.content).get("token")
@@ -163,7 +167,7 @@ def fetch_tgarchive_files(query: str, retry_count: int = 1) -> Optional[Dict]:
         if not (TG_ARCHIVE_TOKEN := fetch_tgarchive_token()):
             logger.error("Unable to get tgarchive token")
             return results
-    logger.info(f"Fetching files from:: {TG_ARCHIVE_SEARCH_API}")
+    logger.info(f"Received request to search TG files for:: {query}")
     try:
         req_body = {
             "site": "tgarchive",
@@ -180,13 +184,22 @@ def fetch_tgarchive_files(query: str, retry_count: int = 1) -> Optional[Dict]:
             "Origin": "https://tgarchive.eu.org",
             "Referer": "https://tgarchive.eu.org"
         }
-        files_response = requests.post(url=TG_ARCHIVE_SEARCH_API, data=json.dumps(req_body), headers=req_headers)
+        if secondary_tg_search_api := os.getenv(key='SECONDARY_TG_SEARCH_API'):
+            req_url = f"{secondary_tg_search_api}/search"
+        else:
+            req_url = TG_ARCHIVE_SEARCH_API
+        logger.info(f"Sending request to:: {req_url}")
+        files_response = requests.post(url=req_url, data=json.dumps(req_body), headers=req_headers)
         if files_response.ok:
             logger.debug(f"Received response:: {files_response.text}")
             files_list = json.loads(files_response.content).get("files")
             for _file in files_list:
                 _file_obj = json.loads(_file.get("description"))
-                results[str(int(_file_obj.get("id")))] = {
+                file_id = _file_obj.get("id") if _file_obj.get("id") is not None else _file_obj.get("_id")
+                if file_id is None:
+                    logger.error(f"TG File id is missing for:: {_file_obj.get('name')}")
+                    continue
+                results[str(int(file_id))] = {
                     "name": _file_obj.get("name"),
                     "size": humanize.naturalsize(_file_obj.get("size")),
                     "mimeType": _file_obj.get("mime_type"),
