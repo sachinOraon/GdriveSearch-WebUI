@@ -203,6 +203,7 @@ def fetch_tgarchive_files(query: str, retry_count: int = 1) -> Optional[Dict]:
                     "name": _file_obj.get("name"),
                     "size": humanize.naturalsize(_file_obj.get("size")),
                     "mimeType": _file_obj.get("mime_type"),
+                    "fileUniqueId": _file_obj.get("file_unique_id"),
                     "is_tgapi": True
                 }
         else:
