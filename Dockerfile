@@ -1,4 +1,4 @@
-FROM python:3.10.0
+FROM python:3.10-slim
 COPY . /usr/src/app
 WORKDIR /usr/src/app
 RUN python -m pip install --upgrade pip
